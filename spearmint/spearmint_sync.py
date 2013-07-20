@@ -1,7 +1,7 @@
-##
+#
 # Copyright (C) 2012 Jasper Snoek, Hugo Larochelle and Ryan P. Adams
-# 
-# This code is written for research and educational purposes only to 
+#
+# This code is written for research and educational purposes only to
 # supplement the paper entitled
 # "Practical Bayesian Optimization of Machine Learning Algorithms"
 # by Snoek, Larochelle and Adams
@@ -11,12 +11,12 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import optparse
@@ -30,11 +30,11 @@ import re
 import Locker
 
 from google.protobuf import text_format
-from spearmint_pb2   import *
-from ExperimentGrid  import *
+from spearmint_pb2 import *
+from ExperimentGrid import *
 
 # System dependent modules
-MCR_LOCATION = "/home/matlab/v715" # hack
+MCR_LOCATION = "/home/matlab/v715"  # hack
 
 #
 # There are two things going on here.  There are "experiments", which are
@@ -52,6 +52,7 @@ MCR_LOCATION = "/home/matlab/v715" # hack
 # controller mode, which determines the jobs that should be executed and
 # submits them to the queueing system.
 #
+
 
 def main():
     parser = optparse.OptionParser(usage="usage: %prog [options] directory")
@@ -92,9 +93,11 @@ def main():
     else:
         # Otherwise run in controller mode.
         main_controller(options, args)
-    
-##############################################################################
-##############################################################################
+
+#
+#
+
+
 def main_wrapper(options, args):
     sys.stderr.write("Running in wrapper mode for '%s'\n" % (args[0]))
 
@@ -104,25 +107,25 @@ def main_wrapper(options, args):
 
     # Load in the protocol buffer spec for this job and experiment.
     job_file = args[0]
-    job      = load_job(job_file)
+    job = load_job(job_file)
 
     ExperimentGrid.job_running(job.expt_dir, job.id)
-    
+
     # Update metadata.
     job.start_t = int(time.time())
-    job.status  = 'running'
+    job.status = 'running'
     save_job(job_file, job)
 
-    ##########################################################################
-    success    = False
+    #
+    success = False
     start_time = time.time()
 
     try:
         if job.language == MATLAB:
             # Run it as a Matlab function.
             function_call = "matlab_wrapper('%s'),quit;" % (job_file)
-            matlab_cmd    = ('matlab -nosplash -nodesktop -r "%s"' % 
-                             (function_call))
+            matlab_cmd = ('matlab -nosplash -nodesktop -r "%s"' %
+                         (function_call))
             sys.stderr.write(matlab_cmd + "\n")
             subprocess.check_call(matlab_cmd, shell=True)
 
@@ -154,7 +157,7 @@ def main_wrapper(options, args):
                     raise Exception("Unknown parameter type.")
 
             # Load up this module and run
-            module  = __import__(job.name)
+            module = __import__(job.name)
             result = module.main(job.id, params)
 
             sys.stderr.write("Got result %f\n" % (result))
@@ -180,7 +183,7 @@ def main_wrapper(options, args):
             # Change into the directory.
             os.chdir(job.expt_dir)
 
-            if os.environ.has_key('MATLAB'):
+            if 'MATLAB' in os.environ:
                 mcr_loc = os.environ['MATLAB']
             else:
                 mcr_loc = MCR_LOCATION
@@ -196,10 +199,10 @@ def main_wrapper(options, args):
     except:
         sys.stderr.write("Problem executing the function\n")
         print sys.exc_info()
-        
+
     end_time = time.time()
     duration = end_time - start_time
-    ##########################################################################
+    #
 
     job = load_job(job_file)
     sys.stderr.write("Job file reloaded.\n")
@@ -209,16 +212,16 @@ def main_wrapper(options, args):
         success = False
 
     if success:
-        sys.stderr.write("Completed successfully in %0.2f seconds. [%f]\n" 
+        sys.stderr.write("Completed successfully in %0.2f seconds. [%f]\n"
                          % (duration, job.value))
 
         # Update the status for this job.
         ExperimentGrid.job_complete(job.expt_dir, job.id,
                                     job.value, duration)
-    
+
         # Update metadata.
-        job.end_t    = int(time.time())
-        job.status   = 'complete'
+        job.end_t = int(time.time())
+        job.status = 'complete'
         job.duration = duration
 
     else:
@@ -226,20 +229,22 @@ def main_wrapper(options, args):
 
         # Update the status for this job.
         ExperimentGrid.job_broken(job.expt_dir, job.id)
-    
+
         # Update metadata.
-        job.end_t    = int(time.time())
-        job.status   = 'broken'
+        job.end_t = int(time.time())
+        job.status = 'broken'
         job.duration = duration
 
     save_job(job_file, job)
 
-##############################################################################
-##############################################################################
+#
+#
+
+
 def main_controller(options, args):
 
-    expt_dir  = os.path.realpath(args[0])
-    work_dir  = os.path.realpath('.')
+    expt_dir = os.path.realpath(args[0])
+    work_dir = os.path.realpath('.')
     expt_name = os.path.basename(expt_dir)
 
     if not os.path.exists(expt_dir):
@@ -248,22 +253,23 @@ def main_controller(options, args):
         sys.exit(-1)
 
     # Load up the chooser module.
-    module  = __import__(options.chooser_module)
+    module = __import__(options.chooser_module)
     chooser = module.init(expt_dir, options.chooser_args)
- 
+
     # Loop until we run out of jobs.
     while True:
         attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options)
         # This is polling frequency. A higher frequency means that the algorithm
-        # picks up results more quickly after they finish, but also significantly 
+        # picks up results more quickly after they finish, but also significantly
         # increases overhead.
         time.sleep(options.polling_time)
- 
+
+
 def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
     sys.stderr.write("\n")
-    
+
     expt_file = os.path.join(expt_dir, options.config_file)
-    expt      = load_expt(expt_file)
+    expt = load_expt(expt_file)
 
     # Build the experiment grid.
     expt_grid = ExperimentGrid(expt_dir,
@@ -272,7 +278,7 @@ def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
                                options.grid_seed)
 
     # Print out the current best function value.
-    best_val, best_job = expt_grid.get_best()    
+    best_val, best_job = expt_grid.get_best()
     if best_job >= 0:
         sys.stderr.write("Current best: %f (job %d)\n" % (best_val, best_job))
     else:
@@ -280,19 +286,19 @@ def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
 
     # Gets you everything - NaN for unknown values & durations.
     grid, values, durations = expt_grid.get_grid()
-    
+
     # Returns lists of indices.
     candidates = expt_grid.get_candidates()
-    pending    = expt_grid.get_pending()
-    complete   = expt_grid.get_complete()
-    sys.stderr.write("%d candidates   %d pending   %d complete\n" % 
+    pending = expt_grid.get_pending()
+    complete = expt_grid.get_complete()
+    sys.stderr.write("%d candidates   %d pending   %d complete\n" %
                      (candidates.shape[0], pending.shape[0], complete.shape[0]))
-      
+
     # Verify that pending jobs are actually running.
     for job_id in pending:
         sgeid = expt_grid.get_sgeid(job_id)
         reset_job = False
-        
+
         try:
             # Send an alive signal to proc (note this could kill it in windows)
             os.kill(sgeid, 0)
@@ -309,8 +315,8 @@ def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
 
     # Print out the best job results
     best_job_fh = open(os.path.join(expt_dir, 'best_job_and_result.txt'), 'w')
-    best_job_fh.write("Best result: %f\nJob-id: %d\nParameters: \n" % 
-                      (best_val, best_job))    
+    best_job_fh.write("Best result: %f\nJob-id: %d\nParameters: \n" %
+                      (best_val, best_job))
     for best_params in expt_grid.get_params(best_job):
         best_job_fh.write(str(best_params) + '\n')
     best_job_fh.close()
@@ -343,12 +349,12 @@ def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
 
     # Convert this back into an interpretable job and add metadata.
     job = Job()
-    job.id        = job_id
-    job.expt_dir  = expt_dir
-    job.name      = expt.name
-    job.language  = expt.language
-    job.status    = 'submitted'
-    job.submit_t  = int(time.time())
+    job.id = job_id
+    job.expt_dir = expt_dir
+    job.name = expt.name
+    job.language = expt.language
+    job.status = 'submitted'
+    job.submit_t = int(time.time())
     job.param.extend(expt_grid.get_params(job_id))
 
     # Make sure we have a job subdirectory.
@@ -388,6 +394,7 @@ def attempt_dispatch(expt_name, expt_dir, work_dir, chooser, options):
 
     return
 
+
 def load_expt(filename):
     fh = open(filename, 'rb')
     expt = Experiment()
@@ -395,13 +402,15 @@ def load_expt(filename):
     fh.close()
     return expt
 
+
 def load_job(filename):
     fh = open(filename, 'rb')
     job = Job()
-    #text_format.Merge(fh.read(), job)
+    # text_format.Merge(fh.read(), job)
     job.ParseFromString(fh.read())
     fh.close()
     return job
+
 
 def save_expt(filename, expt):
     fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -410,18 +419,18 @@ def save_expt(filename, expt):
     cmd = 'mv "%s" "%s"' % (fh.name, filename)
     subprocess.check_call(cmd, shell=True)
 
+
 def save_job(filename, job):
     fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-    #fh.write(text_format.MessageToString(job))
+    # fh.write(text_format.MessageToString(job))
     fh.write(job.SerializeToString())
     fh.close()
     cmd = 'mv "%s" "%s"' % (fh.name, filename)
     subprocess.check_call(cmd, shell=True)
 
-def job_submit(name, output_file, job_file, working_dir):
 
-    cmd = ('''python spearmint_sync.py --wrapper "%s" > %s''' % 
-           (job_file, output_file))
+def job_submit(name, output_file, job_file, working_dir):
+    cmd = ('''python2 %s/repos/spearmint/spearmint/spearmint_sync.py --wrapper "%s" > %s''' % (os.environ['HOME'] job_file, output_file))
     output_file = open(output_file, 'w')
 
     # Submit the job.
