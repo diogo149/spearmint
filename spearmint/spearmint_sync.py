@@ -430,7 +430,7 @@ def save_job(filename, job):
 
 
 def job_submit(name, output_file, job_file, working_dir):
-    cmd = ('''python2 %s/repos/spearmint/spearmint/spearmint_sync.py --wrapper "%s" > %s''' % (os.environ['HOME'] job_file, output_file))
+    cmd = ('''python2 %s/repos/spearmint/spearmint/spearmint_sync.py --wrapper "%s" > %s''' % (os.environ['HOME'], job_file, output_file))
     output_file = open(output_file, 'w')
 
     # Submit the job.
