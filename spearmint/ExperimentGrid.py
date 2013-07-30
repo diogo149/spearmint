@@ -1,7 +1,7 @@
-##
+#
 # Copyright (C) 2012 Jasper Snoek, Hugo Larochelle and Ryan P. Adams
-# 
-# This code is written for research and educational purposes only to 
+#
+# This code is written for research and educational purposes only to
 # supplement the paper entitled
 # "Practical Bayesian Optimization of Machine Learning Algorithms"
 # by Snoek, Larochelle and Adams
@@ -11,12 +11,12 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os
@@ -24,18 +24,19 @@ import sys
 import tempfile
 import cPickle
 
-import numpy        as np
+import numpy as np
 import numpy.random as npr
 
 from spearmint_pb2 import *
-from Locker        import *
-from sobol_lib     import *
+from Locker import *
+from sobol_lib import *
 
 CANDIDATE_STATE = 0
 SUBMITTED_STATE = 1
-RUNNING_STATE   = 2
-COMPLETE_STATE  = 3
-BROKEN_STATE    = -1
+RUNNING_STATE = 2
+COMPLETE_STATE = 3
+BROKEN_STATE = -1
+
 
 class ExperimentGrid:
 
@@ -57,7 +58,7 @@ class ExperimentGrid:
     def __init__(self, expt_dir, variables=None, grid_size=None, grid_seed=1):
         self.expt_dir = expt_dir
         self.jobs_pkl = os.path.join(expt_dir, 'expt-grid.pkl')
-        self.locker   = Locker()
+        self.locker = Locker()
 
         # Only one process at a time is allowed to have access to this.
         sys.stderr.write("Waiting to lock grid...")
@@ -69,11 +70,11 @@ class ExperimentGrid:
 
             # Set up the grid for the first time.
             self.seed = grid_seed
-            self.vmap   = GridMap(variables, grid_size)
-            self.grid   = self._hypercube_grid(self.vmap.card(), grid_size)
+            self.vmap = GridMap(variables, grid_size)
+            self.grid = self._hypercube_grid(self.vmap.card(), grid_size)
             self.status = np.zeros(grid_size, dtype=int) + CANDIDATE_STATE
             self.values = np.zeros(grid_size) + np.nan
-            self.durs   = np.zeros(grid_size) + np.nan
+            self.durs = np.zeros(grid_size) + np.nan
             self.sgeids = np.zeros(grid_size, dtype=int)
 
             # Save this out.
@@ -106,13 +107,13 @@ class ExperimentGrid:
         return np.nonzero(self.status == BROKEN_STATE)[0]
 
     def get_params(self, index):
-        return self.vmap.get_params(self.grid[index,:])
+        return self.vmap.get_params(self.grid[index, :])
 
     def get_best(self):
         finite = self.values[np.isfinite(self.values)]
         if len(finite) > 0:
             cur_min = np.min(finite)
-            index   = np.nonzero(self.values==cur_min)[0][0]
+            index = np.nonzero(self.values == cur_min)[0][0]
             return cur_min, index
         else:
             return np.nan, -1
@@ -122,17 +123,17 @@ class ExperimentGrid:
 
     def add_to_grid(self, candidate):
         # Set up the grid
-        self.grid   = np.vstack((self.grid, candidate))
-        self.status = np.append(self.status, np.zeros(1, dtype=int) + 
+        self.grid = np.vstack((self.grid, candidate))
+        self.status = np.append(self.status, np.zeros(1, dtype=int) +
                                 int(CANDIDATE_STATE))
-        
-        self.values = np.append(self.values, np.zeros(1)+np.nan)
-        self.durs   = np.append(self.durs, np.zeros(1)+np.nan)
-        self.sgeids = np.append(self.sgeids, np.zeros(1,dtype=int))
+
+        self.values = np.append(self.values, np.zeros(1) + np.nan)
+        self.durs = np.append(self.durs, np.zeros(1) + np.nan)
+        self.sgeids = np.append(self.sgeids, np.zeros(1, dtype=int))
 
         # Save this out.
         self._save_jobs()
-        return self.grid.shape[0]-1
+        return self.grid.shape[0] - 1
 
     def set_candidate(self, id):
         self.status[id] = CANDIDATE_STATE
@@ -150,7 +151,7 @@ class ExperimentGrid:
     def set_complete(self, id, value, duration):
         self.status[id] = COMPLETE_STATE
         self.values[id] = value
-        self.durs[id]   = duration
+        self.durs[id] = duration
         self._save_jobs()
 
     def set_broken(self, id):
@@ -158,43 +159,44 @@ class ExperimentGrid:
         self._save_jobs()
 
     def _load_jobs(self):
-        fh   = open(self.jobs_pkl, 'r')
+        fh = open(self.jobs_pkl, 'r')
         jobs = cPickle.load(fh)
         fh.close()
 
-        self.vmap   = jobs['vmap']
-        self.grid   = jobs['grid']
+        self.vmap = jobs['vmap']
+        self.grid = jobs['grid']
         self.status = jobs['status']
         self.values = jobs['values']
-        self.durs   = jobs['durs']
+        self.durs = jobs['durs']
         self.sgeids = jobs['sgeids']
 
     def _save_jobs(self):
 
         # Write everything to a temporary file first.
         fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        cPickle.dump({ 'vmap'   : self.vmap,
-                       'grid'   : self.grid,
-                       'status' : self.status,
-                       'values' : self.values,
-                       'durs'   : self.durs,
-                       'sgeids' : self.sgeids }, fh)
+        cPickle.dump({'vmap': self.vmap,
+                      'grid': self.grid,
+                      'status': self.status,
+                      'values': self.values,
+                      'durs': self.durs,
+                      'sgeids': self.sgeids}, fh)
         fh.close()
 
         # Use an atomic move for better NFS happiness.
         cmd = 'mv "%s" "%s"' % (fh.name, self.jobs_pkl)
-        os.system(cmd) # TODO: Should check system-dependent return status.
+        os.system(cmd)  # TODO: Should check system-dependent return status.
 
     def _hypercube_grid(self, dims, size):
         # Generate from a sobol sequence
-        sobol_grid = np.transpose(i4_sobol_generate(dims,size,self.seed))
-                
+        sobol_grid = np.transpose(i4_sobol_generate(dims, size, self.seed)) if dims <= 40 else np.random.uniform(size=(size, dims))
+
         return sobol_grid
 
+
 class GridMap:
-    
+
     def __init__(self, variables, grid_size):
-        self.variables   = []
+        self.variables = []
         self.cardinality = 0
 
         # Count the total number of dimensions and roll into new format.
@@ -202,47 +204,47 @@ class GridMap:
             self.cardinality += variable.size
 
             if variable.type == Experiment.ParameterSpec.INT:
-                self.variables.append({ 'name' : variable.name,
-                                        'size' : variable.size,
-                                        'type' : 'int',
-                                        'min'  : int(variable.min),
-                                        'max'  : int(variable.max)})
+                self.variables.append({'name': variable.name,
+                                       'size': variable.size,
+                                       'type': 'int',
+                                       'min': int(variable.min),
+                                       'max': int(variable.max)})
 
             elif variable.type == Experiment.ParameterSpec.FLOAT:
-                self.variables.append({ 'name' : variable.name,
-                                        'size' : variable.size,
-                                        'type' : 'float',
-                                        'min'  : float(variable.min),
-                                        'max'  : float(variable.max)})
+                self.variables.append({'name': variable.name,
+                                       'size': variable.size,
+                                       'type': 'float',
+                                       'min': float(variable.min),
+                                       'max': float(variable.max)})
 
             elif variable.type == Experiment.ParameterSpec.ENUM:
-                self.variables.append({ 'name'    : variable.name,
-                                        'size'    : variable.size,
-                                        'type'    : 'enum',
-                                        'options' : list(variable.options)})
+                self.variables.append({'name': variable.name,
+                                       'size': variable.size,
+                                       'type': 'enum',
+                                       'options': list(variable.options)})
             else:
                 raise Exception("Unknown parameter type.")
         sys.stderr.write("Optimizing over %d dimensions\n" % (self.cardinality))
-    
+
     def get_params(self, u):
         if u.shape[0] != self.cardinality:
             raise Exception("Hypercube dimensionality is incorrect.")
 
         params = []
-        index  = 0
+        index = 0
         for variable in self.variables:
             param = Parameter()
-            
+
             param.name = variable['name']
 
             if variable['type'] == 'int':
                 for dd in xrange(variable['size']):
-                    param.int_val.append(variable['min'] + self._index_map(u[index], variable['max']-variable['min']+1))
+                    param.int_val.append(variable['min'] + self._index_map(u[index], variable['max'] - variable['min'] + 1))
                     index += 1
 
             elif variable['type'] == 'float':
                 for dd in xrange(variable['size']):
-                    param.dbl_val.append(variable['min'] + u[index]*(variable['max']-variable['min']))
+                    param.dbl_val.append(variable['min'] + u[index] * (variable['max'] - variable['min']))
                     index += 1
 
             elif variable['type'] == 'enum':
@@ -253,13 +255,13 @@ class GridMap:
 
             else:
                 raise Exception("Unknown parameter type.")
-            
+
             params.append(param)
 
         return params
-            
+
     def card(self):
         return self.cardinality
 
     def _index_map(self, u, items):
-        return int(np.floor((1-np.finfo(float).eps) * u * float(items)))
+        return int(np.floor((1 - np.finfo(float).eps) * u * float(items)))
