@@ -25,7 +25,7 @@ import gp
 import sys
 import util
 import tempfile
-import copy
+import time
 from copy import deepcopy
 import numpy as np
 import numpy.random as npr
@@ -35,7 +35,7 @@ import scipy.optimize as spo
 import cPickle
 import multiprocessing
 
-from Locker import *
+from Locker import Locker
 
 
 def optimize_pt(c, b, comp, pend, vals, model):

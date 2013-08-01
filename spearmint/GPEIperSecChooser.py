@@ -1,7 +1,7 @@
-##
+#
 # Copyright (C) 2012 Jasper Snoek, Hugo Larochelle and Ryan P. Adams
-# 
-# This code is written for research and educational purposes only to 
+#
+# This code is written for research and educational purposes only to
 # supplement the paper entitled
 # "Practical Bayesian Optimization of Machine Learning Algorithms"
 # by Snoek, Larochelle and Adams
@@ -11,12 +11,12 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os
@@ -24,6 +24,7 @@ import gp
 import sys
 import util
 import tempfile
+import time
 import numpy          as np
 import numpy.random   as npr
 import scipy.linalg   as spla
@@ -31,7 +32,7 @@ import scipy.stats    as sps
 import scipy.optimize as spo
 import cPickle
 
-from Locker import *
+from Locker import Locker
 
 def init(expt_dir, arg_string):
     args = util.unpack_args(arg_string)
@@ -43,18 +44,18 @@ second (EI) acquisition function.  Candidates are sampled densely in the unit
 hypercube and then a subset of the most promising points are optimized to maximize
 EI per second over hyperparameter samples.  Slice sampling is used to sample
 Gaussian process hyperparameters for two GPs, one over the objective function and
-the other over the running time of the algorithm.  
+the other over the running time of the algorithm.
 """
 class GPEIperSecChooser:
 
-    def __init__(self, expt_dir, covar="Matern52", mcmc_iters=10, 
+    def __init__(self, expt_dir, covar="Matern52", mcmc_iters=10,
                  pending_samples=100, noiseless=False, burnin=100,
                  grid_subset=20):
         self.cov_func        = getattr(gp, covar)
         self.locker          = Locker()
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
 
-        self.stats_file      = os.path.join(expt_dir, 
+        self.stats_file      = os.path.join(expt_dir,
                                    self.__module__ + "_hyperparameters.txt")
         self.mcmc_iters      = int(mcmc_iters)
         self.burnin          = int(burnin)
@@ -104,12 +105,12 @@ class GPEIperSecChooser:
         self.locker.unlock(self.state_pkl)
 
     def _real_init(self, dims, values, durations):
-        
+
         sys.stderr.write("Waiting to lock hyperparameter pickle...")
         self.locker.lock_wait(self.state_pkl)
         sys.stderr.write("...acquired\n")
 
-        if os.path.exists(self.state_pkl):            
+        if os.path.exists(self.state_pkl):
             fh    = open(self.state_pkl, 'r')
             state = cPickle.load(fh)
             fh.close()
@@ -148,7 +149,7 @@ class GPEIperSecChooser:
 
     def cov(self, amp2, ls, x1, x2=None):
         if x2 is None:
-            return amp2 * (self.cov_func(ls, x1, None) 
+            return amp2 * (self.cov_func(ls, x1, None)
                            + 1e-6*np.eye(x1.shape[0]))
         else:
             return amp2 * self.cov_func(ls, x1, x2)
@@ -179,10 +180,10 @@ class GPEIperSecChooser:
         # to maintain strict positivity
         durs = np.log(durs)
 
-        # Spray a set of candidates around the min so far 
+        # Spray a set of candidates around the min so far
         numcand = cand.shape[0]
         best_comp = np.argmin(vals)
-        cand2 = np.vstack((np.random.randn(10,comp.shape[1])*0.001 +
+        cand2 = np.vstack((np.random.randn(10, comp.shape[1])*0.001 +
                            comp[best_comp,:], cand))
 
         if self.mcmc_iters > 0:
@@ -197,7 +198,7 @@ class GPEIperSecChooser:
                                         np.sqrt(self.amp2), self.noise,
                                         np.min(self.ls), np.max(self.ls)))
                 self.needs_burnin = False
-            
+
             # Sample from hyperparameters.
             # Adjust the candidates to hit ei/sec peaks
             self.hyper_samples = []
@@ -206,18 +207,18 @@ class GPEIperSecChooser:
                 sys.stderr.write("%d/%d] mean: %.2f  amp: %.2f  noise: %.4f "
                                  "min_ls: %.4f  max_ls: %.4f\n"
                                  % (mcmc_iter+1, self.mcmc_iters, self.mean,
-                                    np.sqrt(self.amp2), self.noise, 
+                                    np.sqrt(self.amp2), self.noise,
                                     np.min(self.ls), np.max(self.ls)))
 
                 sys.stderr.write("%d/%d] time_mean: %.2fs time_amp: %.2f  time_noise: %.4f "
                                  "time_min_ls: %.4f  time_max_ls: %.4f\n"
                                  % (mcmc_iter+1, self.mcmc_iters, np.exp(self.time_mean),
-                                    np.sqrt(self.time_amp2), np.exp(self.time_noise), 
+                                    np.sqrt(self.time_amp2), np.exp(self.time_noise),
                                     np.min(self.time_ls), np.max(self.time_ls)))
             self.dump_hypers()
 
-            # Pick the top candidates to optimize over                
-            overall_ei = self.ei_over_hypers(comp,pend,cand2,vals,durs)
+            # Pick the top candidates to optimize over
+            overall_ei = self.ei_over_hypers(comp, pend, cand2, vals, durs)
             inds = np.argsort(np.mean(overall_ei, axis=1))[-self.grid_subset:]
             cand2 = cand2[inds,:]
 
@@ -225,19 +226,19 @@ class GPEIperSecChooser:
             b = []# optimization bounds
             for i in xrange(0, cand.shape[1]):
                 b.append((0, 1))
-                
+
             for i in xrange(0, cand2.shape[0]):
                 sys.stderr.write("Optimizing candidate %d/%d\n" %
                                  (i+1, cand2.shape[0]))
                 ret = spo.fmin_l_bfgs_b(self.grad_optimize_ei_over_hypers,
                                         cand2[i,:].flatten(),
-                                        args=(comp,vals,durs,True),
+                                        args=(comp, vals, durs, True),
                                         bounds=b, disp=0)
                 cand2[i,:] = ret[0]
 
             cand = np.vstack((cand, cand2))
 
-            overall_ei = self.ei_over_hypers(comp,pend,cand,vals,durs)
+            overall_ei = self.ei_over_hypers(comp, pend, cand, vals, durs)
             best_cand = np.argmax(np.mean(overall_ei, axis=1))
             self.dump_hypers()
             if (best_cand >= numcand):
@@ -251,7 +252,7 @@ class GPEIperSecChooser:
 
             sys.stderr.write("mean: %f  amp: %f  noise: %f "
                              "min_ls: %f  max_ls: %f\n"
-                             % (self.mean, np.sqrt(self.amp2), 
+                             % (self.mean, np.sqrt(self.amp2),
                                 self.noise, np.min(self.ls), np.max(self.ls)))
 
             # Pick the top candidates to optimize over
@@ -263,16 +264,16 @@ class GPEIperSecChooser:
             b = []# optimization bounds
             for i in xrange(0, cand.shape[1]):
                 b.append((0, 1))
-                
+
             for i in xrange(0, cand2.shape[0]):
-                sys.stderr.write("Optimizing candidate %d/%d\n" % 
+                sys.stderr.write("Optimizing candidate %d/%d\n" %
                                  (i+1, cand2.shape[0]))
                 ret = spo.fmin_l_bfgs_b(self.grad_optimize_ei,
                                         cand2[i,:].flatten(),
-                                        args=(comp,vals,durs,True),
+                                        args=(comp, vals, durs, True),
                                         bounds=b, disp=0)
                 cand2[i,:] = ret[0]
-                
+
             cand = np.vstack((cand, cand2))
             ei = self.compute_ei_per_s(comp, pend, cand, vals, durs)
 
@@ -285,7 +286,7 @@ class GPEIperSecChooser:
             return int(candidates[best_cand])
 
     # Compute EI over hyperparameter samples
-    def ei_over_hypers(self,comp,pend,cand,vals,durs):
+    def ei_over_hypers(self, comp, pend, cand, vals, durs):
         overall_ei = np.zeros((cand.shape[0], self.mcmc_iters))
         for mcmc_iter in xrange(self.mcmc_iters):
             hyper = self.hyper_samples[mcmc_iter]
@@ -299,20 +300,20 @@ class GPEIperSecChooser:
             self.time_noise = time_hyper[1]
             self.time_amp2 = time_hyper[2]
             self.time_ls = time_hyper[3]
-            
-            overall_ei[:,mcmc_iter] = self.compute_ei_per_s(comp, pend, cand,
+
+            overall_ei[:, mcmc_iter] = self.compute_ei_per_s(comp, pend, cand,
                                                             vals, durs)
-            
+
             return overall_ei
 
     def check_grad_ei_per(self, cand, comp, vals, durs):
-        (ei,dx1) = self.grad_optimize_ei_over_hypers(cand, comp, vals, durs)
+        (ei, dx1) = self.grad_optimize_ei_over_hypers(cand, comp, vals, durs)
         dx2 = dx1*0
         idx = np.zeros(cand.shape[0])
         for i in xrange(0, cand.shape[0]):
             idx[i] = 1e-6
-            (ei1,tmp) = self.grad_optimize_ei_over_hypers(cand + idx, comp, vals, durs)
-            (ei2,tmp) = self.grad_optimize_ei_over_hypers(cand - idx, comp, vals, durs)
+            (ei1, tmp) = self.grad_optimize_ei_over_hypers(cand + idx, comp, vals, durs)
+            (ei2, tmp) = self.grad_optimize_ei_over_hypers(cand - idx, comp, vals, durs)
             dx2[i] = (ei - ei2)/(2*1e-6)
             idx[i] = 0
         print 'computed grads', dx1
@@ -340,11 +341,11 @@ class GPEIperSecChooser:
             self.time_ls = time_hyper[3]
 
             if compute_grad:
-                (ei,g_ei) = self.grad_optimize_ei(cand,comp,vals,durs,compute_grad)
+                (ei, g_ei) = self.grad_optimize_ei(cand, comp, vals, durs, compute_grad)
                 summed_grad_ei = summed_grad_ei + g_ei
             else:
-                ei = self.grad_optimize_ei(cand,comp,vals,durs,compute_grad)
-                
+                ei = self.grad_optimize_ei(cand, comp, vals, durs, compute_grad)
+
             summed_ei += ei
 
         if compute_grad:
@@ -362,7 +363,7 @@ class GPEIperSecChooser:
         # First we make predictions for the durations
         # Compute covariances
         comp_time_cov   = self.cov(self.time_amp2, self.time_ls, comp)
-        cand_time_cross = self.cov(self.time_amp2, self.time_ls,comp,cand)
+        cand_time_cross = self.cov(self.time_amp2, self.time_ls, comp, cand)
 
         # Cholesky decompositions
         obsv_time_cov  = comp_time_cov + self.time_noise*np.eye(comp.shape[0])
@@ -375,7 +376,7 @@ class GPEIperSecChooser:
         func_time_m = np.dot(cand_time_cross.T, t_alpha) + self.time_mean
 
         # We don't really need the time variances now
-        #func_time_v = self.time_amp2*(1+1e-6) - np.sum(t_beta**2, axis=0)
+        # func_time_v = self.time_amp2*(1+1e-6) - np.sum(t_beta**2, axis=0)
 
         # Bring time out of the log domain
         func_time_m = np.exp(func_time_m)
@@ -386,28 +387,28 @@ class GPEIperSecChooser:
         # Apply covariance function
         cov_grad_func = getattr(gp, 'grad_' + self.cov_func.__name__)
         cand_cross_grad = cov_grad_func(self.time_ls, comp, cand)
-        grad_cross_t = np.squeeze(cand_cross_grad)        
-            
+        grad_cross_t = np.squeeze(cand_cross_grad)
+
         # Now compute the gradients w.r.t. ei
         # The primary covariances for prediction.
         comp_cov   = self.cov(self.amp2, self.ls, comp)
         cand_cross = self.cov(self.amp2, self.ls, comp, cand)
-        
+
         # Compute the required Cholesky.
         obsv_cov  = comp_cov + self.noise*np.eye(comp.shape[0])
         obsv_chol = spla.cholesky( obsv_cov, lower=True )
-        
+
         cand_cross_grad = cov_grad_func(self.ls, comp, cand)
 
-        # Predictive things.                                   
-        # Solve the linear systems.           
+        # Predictive things.
+        # Solve the linear systems.
         alpha  = spla.cho_solve((obsv_chol, True), vals - self.mean)
         beta   = spla.solve_triangular(obsv_chol, cand_cross, lower=True)
-    
+
         # Predict the marginal means and variances at candidates.
         func_m = np.dot(cand_cross.T, alpha) + self.mean
         func_v = self.amp2*(1+1e-6) - np.sum(beta**2, axis=0)
-        
+
         # Expected improvement
         func_s = np.sqrt(func_v)
         u      = (best - func_m) / func_s
@@ -419,7 +420,7 @@ class GPEIperSecChooser:
         if not compute_grad:
             return ei
 
-        grad_time_xp_m = np.dot(t_alpha.transpose(),grad_cross_t)
+        grad_time_xp_m = np.dot(t_alpha.transpose(), grad_cross_t)
 
         # Gradients of ei w.r.t. mean and variance
         g_ei_m = -ncdf
@@ -427,11 +428,11 @@ class GPEIperSecChooser:
 
         # Apply covariance function
         grad_cross = np.squeeze(cand_cross_grad)
-        
-        grad_xp_m = np.dot(alpha.transpose(),grad_cross)
+
+        grad_xp_m = np.dot(alpha.transpose(), grad_cross)
         grad_xp_v = np.dot(-2*spla.cho_solve((obsv_chol, True),
-                                             cand_cross).transpose(),grad_cross)
-        
+                                             cand_cross).transpose(), grad_cross)
+
         grad_xp = 0.5*self.amp2*(grad_xp_m*g_ei_m + grad_xp_v*g_ei_s2)
         grad_time_xp_m = 0.5*self.time_amp2*grad_time_xp_m*func_time_m
         grad_xp = (func_time_m*grad_xp - ei*grad_time_xp_m)/(func_time_m**2)
@@ -444,7 +445,7 @@ class GPEIperSecChooser:
 
         # Compute covariances
         comp_time_cov   = self.cov(self.time_amp2, self.time_ls, comp)
-        cand_time_cross = self.cov(self.time_amp2, self.time_ls,comp,cand)
+        cand_time_cross = self.cov(self.time_amp2, self.time_ls, comp, cand)
 
         # Cholesky decompositions
         obsv_time_cov  = comp_time_cov + self.time_noise*np.eye(comp.shape[0])
@@ -452,16 +453,16 @@ class GPEIperSecChooser:
 
         # Linear systems
         t_alpha  = spla.cho_solve((obsv_time_chol, True), durs - self.time_mean)
-        #t_beta   = spla.solve_triangular(obsv_time_chol, cand_time_cross, lower=True)
+        # t_beta   = spla.solve_triangular(obsv_time_chol, cand_time_cross, lower=True)
 
         # Predict marginal mean times and (possibly) variances
         func_time_m = np.dot(cand_time_cross.T, t_alpha) + self.time_mean
         # We don't really need the time variances now
-        #func_time_v = self.time_amp2*(1+1e-6) - np.sum(t_beta**2, axis=0)
+        # func_time_v = self.time_amp2*(1+1e-6) - np.sum(t_beta**2, axis=0)
 
         # Bring time out of the log domain
         func_time_m = np.exp(func_time_m)
-        
+
         if pend.shape[0] == 0:
             # If there are no pending, don't do anything fancy.
 
@@ -469,7 +470,7 @@ class GPEIperSecChooser:
             best = np.min(vals)
 
             # The primary covariances for prediction.
-            comp_cov   = self.cov(self.amp2, self.ls, comp)      
+            comp_cov   = self.cov(self.amp2, self.ls, comp)
             cand_cross = self.cov(self.amp2, self.ls, comp, cand)
 
             # Compute the required Cholesky.
@@ -495,7 +496,7 @@ class GPEIperSecChooser:
             return ei_per_s
         else:
             # If there are pending experiments, fantasize their outcomes.
-            
+
             # Create a composite vector of complete and pending.
             comp_pend = np.concatenate((comp, pend))
 
@@ -508,7 +509,7 @@ class GPEIperSecChooser:
             pend_kappa = self.cov(self.amp2, self.ls, pend)
 
             # Use the sub-Cholesky.
-            obsv_chol = comp_pend_chol[:comp.shape[0],:comp.shape[0]]
+            obsv_chol = comp_pend_chol[:comp.shape[0], :comp.shape[0]]
 
             # Solve the linear systems.
             alpha  = spla.cho_solve((obsv_chol, True), vals - self.mean)
@@ -522,11 +523,11 @@ class GPEIperSecChooser:
             pend_chol = spla.cholesky(pend_K, lower=True)
 
             # Make predictions.
-            pend_fant = np.dot(pend_chol, npr.randn(pend.shape[0],self.pending_samples)) + self.mean
+            pend_fant = np.dot(pend_chol, npr.randn(pend.shape[0], self.pending_samples)) + self.mean
 
             # Include the fantasies.
-            fant_vals = np.concatenate((np.tile(vals[:,np.newaxis], 
-                                                (1,self.pending_samples)), pend_fant))
+            fant_vals = np.concatenate((np.tile(vals[:, np.newaxis],
+                                                (1, self.pending_samples)), pend_fant))
 
             # Compute bests over the fantasies.
             bests = np.min(fant_vals, axis=0)
@@ -543,7 +544,7 @@ class GPEIperSecChooser:
             func_v = self.amp2*(1+1e-6) - np.sum(beta**2, axis=0)
 
             # Expected improvement
-            func_s = np.sqrt(func_v[:,np.newaxis])
+            func_s = np.sqrt(func_v[:, np.newaxis])
             u      = (bests[np.newaxis,:] - func_m) / func_s
             ncdf   = sps.norm.cdf(u)
             npdf   = sps.norm.pdf(u)
@@ -561,7 +562,7 @@ class GPEIperSecChooser:
 
         self._sample_time_noisy(comp, durs)
         self._sample_time_ls(comp, durs)
-        
+
         self.hyper_samples.append((self.mean, self.noise, self.amp2, self.ls))
         self.time_hyper_samples.append((self.time_mean, self.time_noise, self.time_amp2,
                                         self.time_ls))
@@ -570,7 +571,7 @@ class GPEIperSecChooser:
         def logprob(ls):
             if np.any(ls < 0) or np.any(ls > self.max_ls):
                 return -np.inf
-            
+
             cov   = self.amp2 * (self.cov_func(ls, comp, None) + 1e-6*np.eye(comp.shape[0])) + self.noise*np.eye(comp.shape[0])
             chol  = spla.cholesky(cov, lower=True)
             solve = spla.cho_solve((chol, True), vals - self.mean)
@@ -583,7 +584,7 @@ class GPEIperSecChooser:
         def logprob(ls):
             if np.any(ls < 0) or np.any(ls > self.time_max_ls):
                 return -np.inf
-            
+
             cov   = self.time_amp2 * (self.cov_func(ls, comp, None) + 1e-6*np.eye(comp.shape[0])) + self.time_noise*np.eye(comp.shape[0])
             chol  = spla.cholesky(cov, lower=True)
             solve = spla.cho_solve((chol, True), vals - self.time_mean)
@@ -604,7 +605,7 @@ class GPEIperSecChooser:
 
             if amp2 < 0 or noise < 0:
                 return -np.inf
-            
+
             cov   = amp2 * (self.cov_func(self.ls, comp, None) + 1e-6*np.eye(comp.shape[0])) + noise*np.eye(comp.shape[0])
             chol  = spla.cholesky(cov, lower=True)
             solve = spla.cho_solve((chol, True), vals - mean)
@@ -612,7 +613,7 @@ class GPEIperSecChooser:
 
             # Roll in noise horseshoe prior.
             lp += np.log(np.log(1 + (self.noise_scale/noise)**2))
-            #lp -= 0.5*(np.log(noise)/self.noise_scale)**2
+            # lp -= 0.5*(np.log(noise)/self.noise_scale)**2
 
             # Roll in amplitude lognormal prior
             lp -= 0.5*(np.log(amp2)/self.amp2_scale)**2
@@ -636,7 +637,7 @@ class GPEIperSecChooser:
 
             if amp2 < 0 or noise < 0:
                 return -np.inf
-            
+
             cov   = amp2 * (self.cov_func(self.time_ls, comp, None) + 1e-6*np.eye(comp.shape[0])) + noise*np.eye(comp.shape[0])
             chol  = spla.cholesky(cov, lower=True)
             solve = spla.cho_solve((chol, True), vals - mean)
@@ -644,7 +645,7 @@ class GPEIperSecChooser:
 
             # Roll in noise horseshoe prior.
             lp += np.log(np.log(1 + (self.time_noise_scale/noise)**2))
-            #lp -= 0.5*(np.log(noise)/self.time_noise_scale)**2
+            # lp -= 0.5*(np.log(noise)/self.time_noise_scale)**2
 
             # Roll in amplitude lognormal prior
             lp -= 0.5*(np.log(amp2)/self.time_amp2_scale)**2
@@ -668,7 +669,7 @@ class GPEIperSecChooser:
 
             if amp2 < 0:
                 return -np.inf
-            
+
             cov   = amp2 * (self.cov_func(self.ls, comp, None) + 1e-6*np.eye(comp.shape[0])) + noise*np.eye(comp.shape[0])
             chol  = spla.cholesky(cov, lower=True)
             solve = spla.cho_solve((chol, True), vals - mean)
@@ -688,12 +689,12 @@ class GPEIperSecChooser:
         # First the GP to observations
         mygp = gp.GP(self.cov_func.__name__)
         mygp.real_init(comp.shape[1], vals)
-        mygp.optimize_hypers(comp,vals)
+        mygp.optimize_hypers(comp, vals)
         self.mean = mygp.mean
         self.ls = mygp.ls
         self.amp2 = mygp.amp2
         self.noise = mygp.noise
-        
+
         # Now the GP to times
         timegp = gp.GP(self.cov_func.__name__)
         timegp.real_init(comp.shape[1], durs)
