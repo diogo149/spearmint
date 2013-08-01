@@ -33,6 +33,7 @@ import scipy.optimize as spo
 import cPickle
 
 from Locker import Locker
+import gp
 
 def init(expt_dir, arg_string):
     args = util.unpack_args(arg_string)
